@@ -1,0 +1,2 @@
+class InvalidFormulaException(Exception):
+    pass
