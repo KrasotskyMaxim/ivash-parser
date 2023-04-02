@@ -2,51 +2,69 @@ from constants import *
 from exceptions import InvalidFormulaException
 
 
+class BinaryFormula:
+    def __init__(self, raw_components):
+        self.raw_components = raw_components
+        self.parse_components()
+        
+    def parse_components(self):
+        if isinstance(actor := self.raw_components[0], list):
+            self.actor = BinaryFormula(actor) if len(actor) == 3 else UnaryFormula(actor)
+        else: self.actor = actor
+        
+        self.action = self.raw_components[1]
+        
+        if isinstance(actored := self.raw_components[2], list):
+            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
+        else: self.actored = actored
+
+
+class UnaryFormula:
+    def __init__(self, raw_components):
+        self.raw_components = raw_components
+        self.parse_components()
+
+    def parse_components(self):
+        self.action = self.raw_components[0]
+        
+        if isinstance(actored := self.raw_components[1], list):
+            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
+        else: self.actored = actored
+
+    
 class LogicFormula(): 
     def __init__(self, formula: str):
         self.raw_formula = formula
-        self.logic_tree = []
+        self.formula = None
         self.parse_formula()
-    
+
     def parse_formula(self):
         if len(self.raw_formula) == 1:
-            if self.raw_formula in LOGIC_CONSTANT | LOGIC_CAPITAL_LETTER:
-                self.logic_tree.append(self.raw_formula)
-            else:
-                raise InvalidFormulaException("Invalid formula!")
-            
-        bracket_counter = 0
-        open_bracket_index = None
-        close_bracket_index = None
-        for i, ch in enumerate(self.raw_formula):
-            if ch == OPEN_BRACKET:
-                bracket_counter += 1
-                open_bracket_index = i
-                for j, nch in enumerate(self.raw_formula[i+1:]):
-                    if ch == OPEN_BRACKET: bracket_counter += 1
-                    if ch == CLOSE_BRACKET: bracket_counter -= 1
-                    if bracket_counter == 0:
-                        close_bracket_index = j
-                        break
-                               
+            self.raw_components.append(self.raw_formula)
+            return 
 
+        formula = self.raw_formula.replace("/\\", CONJUCTION).replace("\\/", DISJUCTION).replace("->", IMPLICATION)
+        formula = formula.replace("(", OPEN_BRACKET).replace(")", CLOSE_BRACKET)
+        formula = " ".join(formula)
+
+        black_list = []
+        fcopy = formula
+        for i, ch in enumerate(fcopy):
+            if ch not in (OPEN_BRACKET, BLANK) and ch not in black_list:
+                formula = formula.replace(ch, f"{ch},") if ch == CLOSE_BRACKET else formula.replace(ch, f"'{ch}',")
+                black_list.append(ch)
+
+        formula = formula[:-1]    
+        result = eval(formula)
+        self.formula = UnaryFormula(result) if len(result) == 2 else BinaryFormula(result)
+            
+        
     def is_sknf(self):
         pass
 
 
-
-
-def main():
-    while True:
-        formula = input("Enter formula: ")
-        a = LogicFormula(formula)
-        # A
-        # (!A)
-        # (A/\A)
-        # (!((A/\0)->B))
-        # ((A/\B)/\C)
-        # [["A", "/\\", "B"], "/\\", "C"]
-
 if __name__ == '__main__':
-    # main()
-    print()
+    formula = "(!(!A))"
+    a = LogicFormula(formula)
+    a.is_sknf()
+    
