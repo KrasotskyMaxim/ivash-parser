@@ -49,7 +49,7 @@ class LogicFormula():
 
         black_list = []
         fcopy = formula
-        for i, ch in enumerate(fcopy):
+        for ch in fcopy:
             if ch not in (OPEN_BRACKET, BLANK) and ch not in black_list:
                 formula = formula.replace(ch, f"{ch},") if ch == CLOSE_BRACKET else formula.replace(ch, f"'{ch}',")
                 black_list.append(ch)
