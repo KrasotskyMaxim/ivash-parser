@@ -9,14 +9,35 @@ class BinaryFormula:
         
     def parse_components(self):
         if isinstance(actor := self.raw_components[0], list):
-            self.actor = BinaryFormula(actor) if len(actor) == 3 else UnaryFormula(actor)
-        else: self.actor = actor
+            if len(actor) == 2:
+                self.actor = UnaryFormula(actor)
+            elif len(actor) == 3:
+                self.actor = BinaryFormula(actor)
+            else:
+                raise InvalidFormulaException
+        else:
+            if actor in (LOGIC_CAPITAL_LETTER | LOGIC_CONSTANT):
+                self.actor = actor
+            else:
+                raise InvalidFormulaException
         
-        self.action = self.raw_components[1]
+        if self.raw_components[1] in BINARY_LINK:
+            self.action = self.raw_components[1]
+        else:
+            raise InvalidFormulaException
         
         if isinstance(actored := self.raw_components[2], list):
-            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
-        else: self.actored = actored
+            if len(actored) == 2:
+                self.actored = UnaryFormula(actored)
+            elif len(actored) == 3:
+                self.actored = BinaryFormula(actored)
+            else:
+                raise InvalidFormulaException
+        else:
+            if actored in (LOGIC_CAPITAL_LETTER | LOGIC_CONSTANT):
+                self.actored = actored
+            else:
+                raise InvalidFormulaException
 
 
 class UnaryFormula:
@@ -25,11 +46,23 @@ class UnaryFormula:
         self.parse_components()
 
     def parse_components(self):
-        self.action = self.raw_components[0]
+        if self.raw_components[0] in NEGATIVE:
+            self.action = self.raw_components[0]
+        else:
+            raise InvalidFormulaException
         
         if isinstance(actored := self.raw_components[1], list):
-            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
-        else: self.actored = actored
+            if len(actored) == 2:
+                self.actored = UnaryFormula(actored)
+            elif len(actored) == 3:
+                self.actored = BinaryFormula(actored)
+            else:
+                raise InvalidFormulaException
+        else:
+            if actored in (LOGIC_CAPITAL_LETTER | LOGIC_CONSTANT):
+                self.actored = actored
+            else:
+                raise InvalidFormulaException
 
     
 class LogicFormula(): 
@@ -54,9 +87,17 @@ class LogicFormula():
                 formula = formula.replace(ch, f"{ch},") if ch == CLOSE_BRACKET else formula.replace(ch, f"'{ch}',")
                 black_list.append(ch)
 
-        formula = formula[:-1]    
-        result = eval(formula)
-        self.formula = UnaryFormula(result) if len(result) == 2 else BinaryFormula(result)
+        formula = formula[:-1]
+        try:    
+            formula = eval(formula)
+        except:
+            raise InvalidFormulaException
+        if len(formula) == 2:
+            self.formula = UnaryFormula(formula)
+        elif len(formula) == 3:
+            self.formula = BinaryFormula(formula)
+        else:
+            raise InvalidFormulaException
             
         
     def is_sknf(self):
@@ -64,7 +105,8 @@ class LogicFormula():
 
 
 if __name__ == '__main__':
-    formula = "(!(!A))"
+    formula = "(/\\A)"
     a = LogicFormula(formula)
+    print(type(a.formula))
     a.is_sknf()
     
