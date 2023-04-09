@@ -1,94 +1,42 @@
 from constants import *
 from exceptions import InvalidFormulaException
+from models import BinaryFormula, UnaryFormula
 from logs import logger
 
+from contextlib import contextmanager
+import json
 
-class BinaryFormula: 
+
+def test_valid_sknf():
+    with open("tests/test-valid-sknf.json", "r") as f:
+        data = json.load(f)
+
+    try:
+        for formula, sknf in data.items():
+            a = LogicFormula(formula)
+            assert a.is_sknf() == sknf
+        logger.info("Tests valid SKNF are passed!")
+    except AssertionError as e:
+        logger.error("Test failed: %s not %s", formula, sknf)
+        raise
+
+@contextmanager
+def clear_bf_components():
+    try:
+        logger.debug("Enter in clear_bf_components contextmanager")
+        # Enter the context
+        # Perform any setup operations
+        yield
+    finally:
+        logger.debug("Clear Formulas components")
+        BinaryFormula.self_components = []
+        BinaryFormula.other_components = []
+        LogicFormula.literals = set()
     
-    self_components = []
-    other_components = []
-    
-    def __init__(self, raw_components):
-        self.raw_components = raw_components
-        self.parse_components()
-        
-    def __eq__(self, other):
-        if not isinstance(other, BinaryFormula):
-            return False
-        
-        if (
-            self.actor == other.actor and self.action == other.action and self.actored == other.actored
-        ) or (
-            self.actor == other.actored and self.action == other.action and self.actored == other.actor        
-        ):
-            return True
-        
-        self.self_components.extend([self.actor, self.actored])
-        self.other_components.extend([other.actor, other.actored])
-        
-        return self.self_components == self.other_components
-
-    def parse_components(self):
-        if isinstance(actor := self.raw_components[0], list):
-            self.actor = BinaryFormula(actor) if len(actor) == 3 else UnaryFormula(actor)
-        else: self.actor = actor
-        
-        self.action = self.raw_components[1]
-        
-        if isinstance(actored := self.raw_components[2], list):
-            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
-        else: self.actored = actored
-        
-    def is_simple_disjuction(self):
-        simple_actor = None
-        simple_actored = None
-
-        if not isinstance(actor := self.actor, BinaryFormula|UnaryFormula):
-            simple_actor = not actor in LOGIC_CONSTANT
-        elif isinstance(actor := self.actor, UnaryFormula):
-            simple_actor = actor.is_simple()
-        else:
-            simple_actor = self.actor.is_simple_disjuction()
-        
-        if not isinstance(actored := self.actored, BinaryFormula|UnaryFormula):
-            simple_actored = not actor in LOGIC_CONSTANT
-        elif isinstance(actored := self.actored, UnaryFormula):
-            simple_actored = actored.is_simple()
-        else:
-            simple_actored = self.actored.is_simple_disjuction()
-        
-        return simple_actor and simple_actored
-
-
-class UnaryFormula:
-    def __init__(self, raw_components):
-        self.raw_components = raw_components
-        self.parse_components()
-        
-    def __eq__(self, other):
-        if not isinstance(other, UnaryFormula):
-            return False
-        
-        return self.action == other.action and self.actored == other.actored
-
-    def parse_components(self):
-        self.action = self.raw_components[0]
-        
-        if isinstance(actored := self.raw_components[1], list):
-            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
-        else: self.actored = actored
-        
-    def is_simple(self):
-        if not isinstance(self.actored, BinaryFormula|UnaryFormula):
-            return not self.actored in LOGIC_CONSTANT
-        
-        if isinstance(self.actored, BinaryFormula):
-            return False
-        
-        return self.actored.is_simple()
-
     
 class LogicFormula(): 
+    literals = set()
+
     def __init__(self, formula: str):
         self.raw_formula = formula
         self.formula = None
@@ -122,21 +70,13 @@ class LogicFormula():
         
         if isinstance(self.formula, UnaryFormula):
             logger.debug("formula '%s' is UnaryFormula", self.formula)
-            return self.formula.is_simple()
-        
+            self.formula, result = self.formula.cut()
+            return result    
+            
         if self.formula.action != CONJUCTION:
-            logger.debug("formula '%s' has not conjuction", self.formula)
-            return self.formula.is_simple_disjuction()
-
-        try:
-            if self.formula.actor == self.formula.actored:
-                logger.debug("formula %s has equal sub_formuls")
-                return False
-        except Exception as e:
-            raise
-        finally:
-            BinaryFormula.self_components = []
-            BinaryFormula.other_components = []
+            with clear_bf_components():    
+                logger.debug("formula '%s' has not conjuction", self.formula)
+                return self.formula.is_simple_disjuction()
 
         if not any([
             isinstance(self.formula.actor, BinaryFormula|UnaryFormula),
@@ -144,18 +84,31 @@ class LogicFormula():
         ]):
             logger.debug("formula '%s' has all chars", self.formula)
             return False
-        
+
         if not all([
-            self._check_sknf_sub_formuls(self.formula.actor),
-            self._check_sknf_sub_formuls(self.formula.actored)
+            self._check_sknf_sub_formuls(self.formula.actor, type="actor"),
+            self._check_sknf_sub_formuls(self.formula.actored, type="actored")
         ]):
             logger.debug("formula '%s' has invalid subformuls", self.formula)
             return False 
+
+        with clear_bf_components():
+            if self.formula.actor == self.formula.actored:
+                logger.debug("formula %s has equal sub_formuls", self.formula)
+                return False
+
+        with clear_bf_components():
+            actor_chars = LogicFormula.get_literals(self.formula.actor)
+        with clear_bf_components():
+            actored_chars = LogicFormula.get_literals(self.formula.actored)
+            
+        if actor_chars != actored_chars:
+            logger.debug("Formulas has not all chars")
+            return False        
         
         return True
 
-
-    def _check_sknf_sub_formuls(self, sf) -> bool:
+    def _check_sknf_sub_formuls(self, sf, type) -> bool:
         if not isinstance(sf, BinaryFormula|UnaryFormula):
             logger.debug("sub formula '%s' of formula '%s' is a char", sf, self.formula)
             return sf not in LOGIC_CONSTANT
@@ -164,37 +117,63 @@ class LogicFormula():
             logger.debug("sub formula '%s' of formula '%s' if UnaryFormula", sf, self.formula)
             return sf.is_simple()
 
+        if sf.action == CONJUCTION:
+            temp = LogicFormula("A")
+            temp.formula = sf
+            return temp.is_sknf()
+
         if sf.action != DISJUCTION:
             logger.debug("sub formula '%s' of formula '%s' has not disjuction", sf, self.formula)
             return False
-
+        
+        with clear_bf_components():           
+            if not sf.is_simple_disjuction():
+                return False
+        
         if not all([
-            self._check_sknf_sub_formuls(sf.actor),
-            self._check_sknf_sub_formuls(sf.actored)
+            self._check_sknf_sub_formuls(sf.actor, type="actor"),
+            self._check_sknf_sub_formuls(sf.actored, type="actored")
         ]):
             logger.debug("sub formula '%s' has invalid subformuls", sf)
             return False 
         
         return True
+    
+    @classmethod
+    def get_literals(cls, formula):
+        if not isinstance(formula, BinaryFormula|UnaryFormula):
+            LogicFormula.literals.add(formula)
+        elif isinstance(formula, UnaryFormula):
+            formula, _ = formula.cut()
+            LogicFormula.literals.add(formula.actored if isinstance(formula, UnaryFormula) else formula)
+        else:
+            if not isinstance(actor := formula.actor, BinaryFormula|UnaryFormula):
+                LogicFormula.literals.add(actor)
+            elif isinstance(actor := formula.actor, UnaryFormula):
+                actor, _ = actor.cut()
+                LogicFormula.literals.add(actor.actored if isinstance(actor, UnaryFormula) else actor)
+            else:
+                LogicFormula.get_literals(formula.actor)
+
+            if not isinstance(actored := formula.actored, BinaryFormula|UnaryFormula):
+                LogicFormula.literals.add(actored)
+            elif isinstance(actored := formula.actored, UnaryFormula):
+                actored, _ = actored.cut()
+                LogicFormula.literals.add(actored.actored if isinstance(actored, UnaryFormula) else actored)
+            else:
+                LogicFormula.get_literals(formula.actored)
+
+        return LogicFormula.literals
+
 
 if __name__ == '__main__':
-    while True:
-        formula = input("Enter formula: ")
-        a = LogicFormula(formula)
-        logger.info("formula '%s' is %s", a.raw_formula, a.is_sknf())
+    try:
+        test_valid_sknf()
+        logger.info("All tests ale passed!!!")
+    except AssertionError as e:
+        logger.error("Tests Failed!!!")
     
-# A - True +
-# 1 - False +
-# (!A) - True +
-# (!(!A)) - True +
-# (A/\A) - False +
-# (A/\(!A)) - True +
-# (A/\B) - False +
-# (A\/B) - True +
-# (A\/A) - False
-# (A\/(!A)) - True +
-# ((A\/(!B))/\((!B)\/A)) - False +
-# ((A\/B)/\((!A)\/B)) - True +
-# ((A\/(B\/C))/\((!C)\/(A\/B))) - True
-# ((A\/(B\/C))/\(C\/(B\/A))) - False
-
+    # while True:
+    #     formula = input("Enter formula: ")
+    #     a = LogicFormula(formula)
+    #     logger.info("formula '%s' is %s", a.raw_formula, a.is_sknf())
