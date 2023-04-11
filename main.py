@@ -1,3 +1,9 @@
+# Лабораторная работа №1 по дисциплине ЛОИС
+# Выполнена студентом группы 021701 БГУИР Красоцким Максимом Денисовичем
+# Файл содержит точку входа в программу, функции проверки правильность формулы и является ли она СКНФ
+# 29.03.2023 версия 1  
+
+
 from constants import *
 from exceptions import InvalidFormulaException
 from models import BinaryFormula, UnaryFormula
@@ -19,6 +25,38 @@ def test_valid_sknf():
     except AssertionError as e:
         logger.error("Test failed: %s not %s", formula, sknf)
         raise
+    except InvalidFormulaException as e:
+        logger.error("Invalid formula %s", formula)
+        raise
+
+
+def test_valid_formula():
+    with open("tests/test-valid-formula.json", "r") as f:
+        data = json.load(f)
+        
+    valid_formulas = data[0]
+    invalid_formulas = data[1]
+    try:
+        for formula, valid in valid_formulas.items():
+            result = True
+            a = LogicFormula(formula)
+            assert result is valid
+    except Exception as e:
+        logger.error("Exception %s occured while test formula %s", type(e), formula)
+        raise
+    
+    try:
+        for formula, invalid in invalid_formulas.items():
+            result = False
+            a = LogicFormula(formula)
+            assert invalid
+    except InvalidFormulaException as e:
+        assert not invalid  
+    except AssertionError as e:
+        logger.error("Formula %s is valid", formula)
+        raise  
+    logger.info("All valid formula tests are passed!")
+
 
 @contextmanager
 def clear_bf_components():
@@ -30,7 +68,6 @@ def clear_bf_components():
     finally:
         logger.debug("Clear Formulas components")
         BinaryFormula.self_components = []
-        BinaryFormula.other_components = []
         LogicFormula.literals = set()
     
     
@@ -43,14 +80,19 @@ class LogicFormula():
         self.parse_formula()
 
     def parse_formula(self):
-        if len(self.raw_formula) == 1:
-            self.formula = self.raw_formula
-            return 
-
         formula = self.raw_formula.replace("/\\", CONJUCTION).replace("\\/", DISJUCTION).replace("->", IMPLICATION)
         formula = formula.replace("(", OPEN_BRACKET).replace(")", CLOSE_BRACKET)
-        formula = " ".join(formula)
+        
+        if not self.is_valid_syntax(formula):
+            raise InvalidFormulaException
+        
+        if len(formula) == 1:
+            self.formula = formula
+            if self.formula not in LOGIC_CAPITAL_LETTER|LOGIC_CONSTANT:
+                raise InvalidFormulaException
+            return
 
+        formula = " ".join(formula)
         black_list = []
         fcopy = formula
         for ch in fcopy:
@@ -59,10 +101,28 @@ class LogicFormula():
                 black_list.append(ch)
 
         formula = formula[:-1]    
-        result = eval(formula)
-        self.formula = UnaryFormula(result) if len(result) == 2 else BinaryFormula(result)
-            
+        try:    
+            formula = eval(formula)
+        except Exception as e:
+            raise InvalidFormulaException
+
+        if len(formula) == 2: 
+            self.formula = UnaryFormula(formula) 
+        elif len(formula) == 3:
+            self.formula = BinaryFormula(formula)
+        else:
+            raise InvalidFormulaException
         
+    def is_valid_syntax(self, formula):
+        for ch in formula:
+            if (
+                ch not in LOGIC_CAPITAL_LETTER|LOGIC_CONSTANT
+            ) and (
+                ch not in (NEGATIVE, CONJUCTION, DISJUCTION, IMPLICATION, EQUAL, OPEN_BRACKET, CLOSE_BRACKET)
+            ):
+                return False
+        return True
+                
     def is_sknf(self) -> bool:
         if not isinstance(self.formula, BinaryFormula|UnaryFormula):
             logger.debug("formula '%s' is a char", self.formula)
@@ -72,10 +132,12 @@ class LogicFormula():
             logger.debug("formula '%s' is UnaryFormula", self.formula)
             self.formula, result = self.formula.cut()
             return result    
-            
+
         if self.formula.action != CONJUCTION:
             with clear_bf_components():    
                 logger.debug("formula '%s' has not conjuction", self.formula)
+                if self.formula.action != DISJUCTION:
+                    return False
                 return self.formula.is_simple_disjuction()
 
         if not any([
@@ -86,8 +148,8 @@ class LogicFormula():
             return False
 
         if not all([
-            self._check_sknf_sub_formuls(self.formula.actor, type="actor"),
-            self._check_sknf_sub_formuls(self.formula.actored, type="actored")
+            self._check_sknf_sub_formuls(self.formula.actor),
+            self._check_sknf_sub_formuls(self.formula.actored)
         ]):
             logger.debug("formula '%s' has invalid subformuls", self.formula)
             return False 
@@ -108,7 +170,7 @@ class LogicFormula():
         
         return True
 
-    def _check_sknf_sub_formuls(self, sf, type) -> bool:
+    def _check_sknf_sub_formuls(self, sf) -> bool:
         if not isinstance(sf, BinaryFormula|UnaryFormula):
             logger.debug("sub formula '%s' of formula '%s' is a char", sf, self.formula)
             return sf not in LOGIC_CONSTANT
@@ -131,8 +193,8 @@ class LogicFormula():
                 return False
         
         if not all([
-            self._check_sknf_sub_formuls(sf.actor, type="actor"),
-            self._check_sknf_sub_formuls(sf.actored, type="actored")
+            self._check_sknf_sub_formuls(sf.actor),
+            self._check_sknf_sub_formuls(sf.actored)
         ]):
             logger.debug("sub formula '%s' has invalid subformuls", sf)
             return False 
@@ -168,12 +230,18 @@ class LogicFormula():
 
 if __name__ == '__main__':
     try:
+        test_valid_formula()
         test_valid_sknf()
         logger.info("All tests ale passed!!!")
     except AssertionError as e:
         logger.error("Tests Failed!!!")
-    
-    # while True:
-    #     formula = input("Enter formula: ")
-    #     a = LogicFormula(formula)
-    #     logger.info("formula '%s' is %s", a.raw_formula, a.is_sknf())
+    except InvalidFormulaException as e:
+        pass
+
+    while True:
+        formula = input("Enter formula: ")
+        try:
+            a = LogicFormula(formula)
+            logger.info("formula '%s' is %s", a.raw_formula, a.is_sknf())
+        except InvalidFormulaException as e:
+            logger.error("Invalid formula!")

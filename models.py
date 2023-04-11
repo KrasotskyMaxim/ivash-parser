@@ -1,10 +1,16 @@
+# Лабораторная работа №1 по дисциплине ЛОИС
+# Выполнена студентом группы 021701 БГУИР Красоцким Максимом Денисовичем
+# Файл содержит модели для хранения формул и методы для работы с ними
+# 29.03.2023 версия 1  
+
+
 from constants import *
+from exceptions import InvalidFormulaException
 
 
 class BinaryFormula: 
     
     self_components = []
-    other_components = []
 
     def __init__(self, raw_components):
         self.raw_components = raw_components
@@ -15,26 +21,47 @@ class BinaryFormula:
             if self.action == CONJUCTION:
                 return other == self.action or other == self.actored
                 
-        sk = self._get_all_components(components=set())
-        ok = other._get_all_components(components=set())
-        
-        return sk == ok or sk in ok
+        sc = self._get_all_components(components=set())
+        oc = other._get_all_components(components=set())
+
+        return sc == oc or sc in oc
 
     def parse_components(self):
         if isinstance(actor := self.raw_components[0], list):
-            self.actor = BinaryFormula(actor) if len(actor) == 3 else UnaryFormula(actor)
-        else: self.actor = actor
+            if len(actor) == 2:
+                self.actor = UnaryFormula(actor)
+            elif len(actor) == 3:
+                self.actor = BinaryFormula(actor)
+            else:
+                raise InvalidFormulaException
+        else:
+            if actor in LOGIC_CAPITAL_LETTER|LOGIC_CONSTANT:
+                self.actor = actor
+            else:
+                raise InvalidFormulaException
         
-        self.action = self.raw_components[1]
+        if self.raw_components[1] in BINARY_LINK:
+            self.action = self.raw_components[1]
+        else:
+            raise InvalidFormulaException
         
         if isinstance(actored := self.raw_components[2], list):
-            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
-        else: self.actored = actored
-        
+            if len(actored) == 2:
+                self.actored = UnaryFormula(actored)
+            elif len(actored) == 3:
+                self.actored = BinaryFormula(actored)
+            else:
+                raise InvalidFormulaException
+        else:
+            if actored in (LOGIC_CAPITAL_LETTER | LOGIC_CONSTANT):
+                self.actored = actored
+            else:
+                raise InvalidFormulaException
+
     def is_simple_disjuction(self):
         simple_actor = None
         simple_actored = None
-
+        
         if not isinstance(actor := self.actor, BinaryFormula|UnaryFormula):
             simple_actor = not actor in LOGIC_CONSTANT
         elif isinstance(actor := self.actor, UnaryFormula):
@@ -136,11 +163,23 @@ class UnaryFormula:
         return cut_self == cut_other
 
     def parse_components(self):
-        self.action = self.raw_components[0]
+        if self.raw_components[0] in NEGATIVE:
+            self.action = self.raw_components[0]
+        else:
+            raise InvalidFormulaException
         
         if isinstance(actored := self.raw_components[1], list):
-            self.actored = BinaryFormula(actored) if len(actored) == 3 else UnaryFormula(actored) 
-        else: self.actored = actored
+            if len(actored) == 2:
+                self.actored = UnaryFormula(actored)
+            elif len(actored) == 3:
+                self.actored = BinaryFormula(actored)
+            else:
+                raise InvalidFormulaException
+        else:
+            if actored in (LOGIC_CAPITAL_LETTER | LOGIC_CONSTANT):
+                self.actored = actored
+            else:
+                raise InvalidFormulaException
         
     def is_simple(self):
         if not isinstance(self.actored, BinaryFormula|UnaryFormula):
@@ -161,4 +200,3 @@ class UnaryFormula:
             return UnaryFormula([NEGATIVE, self.actored]), True
         
         return self.actored.cut(not is_unary)
-
