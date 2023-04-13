@@ -4,8 +4,8 @@
 # 29.03.2023 версия 1  
 
 
-from constants import *
-from exceptions import InvalidFormulaException
+from settings.constants import *
+from settings.exceptions import InvalidFormulaException
 
 
 class BinaryFormula: 
@@ -20,6 +20,7 @@ class BinaryFormula:
         if not isinstance(other, BinaryFormula):
             if self.action == CONJUCTION:
                 return other == self.action or other == self.actored
+            return False
                 
         sc = self._get_all_components(components=set())
         oc = other._get_all_components(components=set())
@@ -70,12 +71,18 @@ class BinaryFormula:
         else:
             simple_actor = self.actor.is_simple_disjuction()
         
-        if not isinstance(actored := self.actored, BinaryFormula):
-            if self.actor in self.self_components:
-                return False
+        if not isinstance(actor := self.actor, BinaryFormula):
+            if isinstance(self.actor, UnaryFormula):
+                if self.actor.actored in self.self_components:
+                    return False
+                else:
+                    self.self_components.append(self.actor.actored)
             else:
-                self.self_components.append(self.actor)
-        
+                if self.actor in self.self_components:
+                    return False
+                else:    
+                    self.self_components.append(self.actor)
+            
         if not isinstance(actored := self.actored, BinaryFormula|UnaryFormula):
             simple_actored = not actored in LOGIC_CONSTANT
         elif isinstance(actored := self.actored, UnaryFormula):
@@ -85,11 +92,17 @@ class BinaryFormula:
             simple_actored = self.actored.is_simple_disjuction()
 
         if not isinstance(actored := self.actored, BinaryFormula):
-            if self.actored in self.self_components:
-                return False
+            if isinstance(self.actored, UnaryFormula):
+                if self.actored.actored in self.self_components:
+                    return False
+                else:
+                    self.self_components.append(self.actored.actored)
             else:
-                self.self_components.append(self.actored)
-
+                if self.actored in self.self_components:
+                    return False
+                else:    
+                    self.self_components.append(self.actored)
+                
         return simple_actor and simple_actored
 
     def _get_all_components(self, components: set = set()):
@@ -185,11 +198,9 @@ class UnaryFormula:
         if not isinstance(self.actored, BinaryFormula|UnaryFormula):
             return not self.actored in LOGIC_CONSTANT
         
-        if isinstance(self.actored, BinaryFormula):
+        if isinstance(self.actored, BinaryFormula|UnaryFormula):
             return False
         
-        return self.actored.is_simple()
-    
     def cut(self, is_unary: bool = True):
         if not self.is_simple():
             return self, False

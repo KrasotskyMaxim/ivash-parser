@@ -4,10 +4,10 @@
 # 29.03.2023 версия 1  
 
 
-from constants import *
-from exceptions import InvalidFormulaException
+from settings.constants import *
+from settings.exceptions import InvalidFormulaException
 from models import BinaryFormula, UnaryFormula
-from logs import logger
+from logs.logs import logger
 
 from contextlib import contextmanager
 import json
@@ -238,10 +238,10 @@ if __name__ == '__main__':
     except InvalidFormulaException as e:
         pass
 
-    while True:
-        formula = input("Enter formula: ")
-        try:
-            a = LogicFormula(formula)
-            logger.info("formula '%s' is %s", a.raw_formula, a.is_sknf())
-        except InvalidFormulaException as e:
-            logger.error("Invalid formula!")
+    # while True:
+    #     formula = input("Enter formula: ")
+    #     try:
+    #         a = LogicFormula(formula)        
+    #         logger.info("formula '%s' is %s", a.raw_formula, a.is_sknf())
+    #     except InvalidFormulaException as e:
+    #         logger.error("Invalid formula!")
